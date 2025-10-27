@@ -5,7 +5,7 @@ date: "2025-10-20"
 ---
 
 ```{r setup, include=FALSE}
-setwd('C:/Users/frost01/Documents/R_Files')
+setwd('C:/Users/frost01/Documents/PSIDdata')
 #install.packages("readxl")
 library(readxl)
 #install.packages('psidR')
@@ -16,9 +16,106 @@ library(psidR)
 #install.packages("data.table")
 library(data.table)
 
+install.packages("remotes")   # only if you don’t already have it
+remotes::install_github("floswald/psidR")
+remove.packages("psidR")
+
+remotes::install_github(
+  "floswald/psidR",
+  force = TRUE,
+  build_vignettes = FALSE,
+  dependencies = TRUE
+)
+
 ```
 
 ## R
+```{r}
+psid_dir <- "C:/Users/frost01/Documents/PSIDdata"
+dir.create(psid_dir, showWarnings = FALSE, recursive = TRUE)
+
+# some psidR builds honor this to skip the prompt
+options(psidR.auto.download = TRUE)
+
+# try again; include download flag if your version supports it
+fam_year <- psidR::build.panel(
+  datadir    = psid_dir,
+  fam.vars   = fam_vars,
+  ind.vars   = NULL,
+  heads.only = TRUE,
+  design     = "all",
+  download   = TRUE   # if your psidR has this arg
+)
+
+install.packages("psidR")
+library(psidR)
+years_needed <- unique(fam_vars$year)
+
+packageVersion("psidR")      # should now show ≥ 2.4
+
+
+options(
+  psidR.icpsr.user = "samuel.buck@hope.edu",   
+  psidR.icpsr.pass = "123Turtles123",  # 
+  psidR.auto.download = TRUE,
+  timeout = max(600, getOption("timeout"))
+)
+
+packageVersion("psidR")
+ls("package:psidR")               
+list.files(psid_dir)    
+
+
+psid_dir <- normalizePath("C:/Users/frost01/Documents/PSIDdata", winslash="/")
+if (!grepl("/$", psid_dir)) psid_dir <- paste0(psid_dir, "/")
+dir.create(psid_dir, showWarnings = FALSE, recursive = TRUE)
+
+fam_year <- psidR::build.panel(
+  datadir    = psid_dir,
+  fam.vars   = fam_vars,
+  ind.vars   = NULL,
+  heads.only = TRUE,
+  design     = "all"
+)
+
+list.files("C:/Users/frost01/Documents/PSIDdata", pattern="FAM2017ER")
+psid_dir <- "C:/Users/frost01/Documents/PSIDdata/"
+psid_dir <- "C:/Users/frost01/Documents/PSIDdata/"
+
+list.files(psid_dir, pattern = "^FAM2017ER\\.(txt|TXT)$")
+list.files(psid_dir, pattern = "^FAM2017ER\\.(do|sps|DO|SPS)$")
+
+
+psidR::build.psid(years = 2017, where = psid_dir)
+
+
+library(psidR)
+
+psid_dir <- "C:/Users/frost01/Documents/PSIDdata/"
+if (!grepl("/$", psid_dir)) psid_dir <- paste0(psid_dir, "/")
+
+# sanity: files must be EXTRACTED in psid_dir with these exact stems
+stopifnot(
+  file.exists(file.path(psid_dir, "FAM2017ER.txt")),
+  file.exists(file.path(psid_dir, "FAM2017ER.do")) || 
+  file.exists(file.path(psid_dir, "FAM2017ER.sps"))
+)
+
+# CALL POSITIONALLY (no arg names)
+psidR::build.psid(2017, psid_dir)
+
+# confirm the R data was created
+list.files(psid_dir, pattern = "(?i)^FAM2017ER\\.(rda|rdata)$")
+
+args(psidR::build.psid)
+# or, to see the body:
+getAnywhere(build.psid)
+
+dat2017 <- psidR:::read.psid(2017, psid_dir, syntax = "do", encoding = "latin1")
+save(dat2017, file = file.path(psid_dir, "FAM2017ER.RDA"))
+
+
+```
 
 ```{r cars}
 
@@ -29,20 +126,20 @@ psid_dir <- "C:/Users/frost01/Documents/PSIDdata"       # <-- change if needed
 stopifnot(dir.exists(psid_dir))
 
 # 2) load your CSV of ER codes (the one you filled)
-map_csv <- "C:/Users/frost01/Documents/Fill_this_with_ER_variable_numbers_by_wave__save_and_reupload_if_you_edit_locally__.csv"
+map_csv <- "C:/Users/frost01/Documents/PSIDdata/Fill_this_with_ER_variable_numbers_by_wave__save_and_reupload_if_you_edit_locally__.csv"
 stopifnot(file.exists(map_csv))
 map <- fread(map_csv)
 
-# optional: only odd years
-# map <- map[year %% 2 == 1]
+#only odd years
+map <- map[year %% 2 == 1]
 
 # 3) construct fam.vars and ind.vars in the format build.panel() expects:
-#    - one row per year
-#    - each column is a variable “name” you want in the output
-#    - each cell is the *ER variable name for that wave* (character string)
+# one row per year
+#each column is a variable “name” you want in the output
+# each cell is the *ER variable name for that wave
 norm_na <- function(x) { x[is.na(x)] <- ""; x }
 
-# choose which columns to pull from FAMILY and IND files (rename on the left to your desired output names)
+# choose which columns to pull from FAMILY and IND files
 fam_vars <- data.frame(
   year      = map$year,
   interview = norm_na(map$ER_interview_num),        # REQUIRED to join across files reliably
@@ -53,27 +150,24 @@ fam_vars <- data.frame(
   stringsAsFactors = FALSE
 )
 
-# drop columns that are entirely blank (no ER specified for any year)
+# drop columns that are entirely blank
 fam_vars <- fam_vars[, colSums(fam_vars != "") > 0, drop = FALSE]
 
-# IND file selections (optional but useful if you’ll make a person-level panel later)
+# IND file selections
 ind_vars <- data.frame(
   year        = map$year,
   rel_to_head = norm_na(map$ER_relation_to_head),   # relation code
   age         = norm_na(map$ER_age),                # age
-  # weights or person id can be added if you know ER codes per year:
-  # perid1968   = norm_na(map$ER_perid1968),        # DON'T include ER30001/ER30002 here (psidR warns against including id vars)
   stringsAsFactors = FALSE
 )
 
 ind_vars <- ind_vars[, colSums(ind_vars != "") > 0, drop = FALSE]
 
-# sanity: do we have at least 'year' + one non-empty fam var?
 if (!("year" %in% names(fam_vars)) || ncol(fam_vars) < 2) {
   stop("fam.vars has no usable variables (only 'year'). Fill ER codes in your CSV for at least 'ER_interview_num' and one data field.")
 }
 
-# 4) build family–year (heads.only=TRUE keeps head/RefPerson rows when merging logic applies)
+# 4) build family–year 
 fam_year <- psidR::build.panel(
   datadir     = psid_dir,
   fam.vars    = fam_vars,
@@ -162,7 +256,7 @@ load_wave <- function(year, er_vars, kind = c("FAMILY","IND")) {
   out
 }
 
-# ---- columns expected in your CSV (names can be different, but these are assumed below)
+# columns expected in your CSV (names can be different, but these are assumed below)
 # FAMILY-level candidates
 fam_cols <- c("ER_release_num", "ER_total_family_income", "ER_household_ID",
               "ER_interview_num", "ER_sequence_num", "ER_famid1968")
@@ -171,7 +265,7 @@ need_any_fam_key <- c("ER_famid1968", "ER_interview_num")
 # INDIVIDUAL-level candidates
 ind_cols <- c("ER_relation_to_head", "ER_age", "ER_perid1968", "ER_famid1968", "ER_interview_num")
 
-# ---- build FAMILY by year
+#build FAMILY by year
 fam_list <- lapply(years, function(y) {
   row <- map[year == y]
   if (!nrow(row)) return(NULL)
@@ -194,7 +288,7 @@ ind_list <- lapply(years, function(y) {
 })
 ind <- rbindlist(ind_list, fill = TRUE)  # may be 0-row if you didn't fill IND ERs; that's ok
 
-# ---- rename columns to stable names AFTER selection (preserves ER-based construction)
+# rename columns to stable names AFTER selection (preserves ER-based construction)
 # Build a per-year rename map so columns line up even if ERs change by wave.
 canonical_names <- c(fam_cols, ind_cols)
 canonical_names <- unique(canonical_names)
@@ -223,7 +317,7 @@ ind <- rbindlist(lapply(years, function(y) {
   safe_rename_year(copy(DT), map[year == y])
 }), fill = TRUE)
 
-# ---- pick keys
+# pick keys
 has_famid <- "ER_famid1968"   %in% names(fam)
 has_intno <- "ER_interview_num" %in% names(fam)
 
@@ -231,7 +325,7 @@ if (!has_famid && !has_intno) {
   stop("Your FAMILY selection does not include ER_famid1968 nor ER_interview_num. Add at least one to your CSV.")
 }
 
-# ---- collapse to one record per (year, family)
+# collapse to one record per (year, family)
 if (has_famid) {
   fam[, n_rows := .N, by = .(year, ER_famid1968)]
   fam_year <- fam[, .SD[1], by = .(year, ER_famid1968)]   # choose first if duplicates; adjust rule if needed
@@ -242,7 +336,7 @@ if (has_famid) {
   key_cols_fam <- c("year", "ER_interview_num")
 }
 
-# ---- family–individual-year (only if you included ER_perid1968 in your CSV)
+# family–individual-year (only if you included ER_perid1968 in your CSV)
 panel_fi <- NULL
 if (nrow(ind) && ("ER_perid1968" %in% names(ind))) {
   # Align keys: prefer famid1968; else fallback to interview number
@@ -260,14 +354,14 @@ if (nrow(ind) && ("ER_perid1968" %in% names(ind))) {
   }
 }
 
-# ---- outputs
+# outputs
 out_dir <- file.path(psid_dir, "_build_out")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 fwrite(fam_year, file.path(out_dir, "family_year_by_ER.csv"))
 if (!is.null(panel_fi)) fwrite(panel_fi, file.path(out_dir, "family_individual_year_by_ER.csv"))
 
-# ---- quick report
+# quick report
 message("\nBuild complete.")
 message("Years requested: ", paste(years, collapse = ", "))
 message("FAMILY rows: ", nrow(fam_year))
