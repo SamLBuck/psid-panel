@@ -9,8 +9,6 @@ date: "2025-10-20"
 
 library(tidyverse)
 library(readr)
-install.packages('arrow')
-library(arrow)
 install.packages('glue')
 library(glue)
 install.packages('stringr')
@@ -309,14 +307,23 @@ try({
 
 
 ```
+
+```{r setup, message=FALSE}
+# Minimal, robust package loader
+need <- c("tidyverse","readr","arrow","glue","stringr","fs","here")
+to_install <- need[!suppressWarnings(sapply(need, requireNamespace, quietly = TRUE))]
+if (length(to_install)) install.packages(to_install, quiet = TRUE)
+lapply(need, library, character.only = TRUE)
+
+# Folders (create if missing)
+dir_create("data_raw"); dir_create("xwalk"); dir_create("output")
+```
 ```{r setup_without_all_xwalks}
 
 ---
 
 ### Chunk 2 — Build (replace your second chunk)
 
-```r
-```{r build_panel, message=TRUE}
 DATA_DIR  <- here("data_raw")
 XWALK_DIR <- here("xwalk")
 OUT_PATH  <- here("output", "psid_family_year_2001_latest.parquet")
