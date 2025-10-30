@@ -309,4 +309,228 @@ try({
 
 
 ```
+```{r setup_without_all_xwalks}
+
+---
+
+### Chunk 2 — Build (replace your second chunk)
+
+```r
+```{r build_panel, message=TRUE}
+DATA_DIR  <- here("data_raw")
+XWALK_DIR <- here("xwalk")
+OUT_PATH  <- here("output", "psid_family_year_2001_latest.parquet")
+
+# Work just 2001/2003 for MVP
+waves <- c(2001, 2003)
+
+# ----------------------------
+# 1) Parse dictionaries (.sps or .do) -> (var, start, end, type)
+# ----------------------------
+parse_sps_positions <- function(dict_path) {
+  lines <- read_lines(dict_path)
+  body <- lines[which(str_detect(lines, regex("^DATA LIST", ignore_case = TRUE))):length(lines)]
+  body <- body[which(str_detect(body, "^/")):length(body)]
+  body <- str_replace_all(body, "\\t", " ")
+  body <- str_squish(body)
+  specs <- str_extract_all(body, "[A-Za-z0-9_]+\\s+\\d+\\s*-\\s*\\d+(?:\\s*\\([A-Za-z]\\))?") |> unlist()
+  specs <- specs[!is.na(specs) & specs != ""]
+  tibble(raw = specs) |>
+    mutate(
+      var   = str_match(raw, "^([A-Za-z0-9_]+)\\s+")[,2],
+      rng   = str_match(raw, "\\s(\\d+\\s*-\\s*\\d+)")[,2],
+      start = as.integer(str_match(rng, "^(\\d+)")[,2]),
+      end   = as.integer(str_match(rng, "(\\d+)$")[,1]),
+      type  = if_else(str_detect(raw, "\\([aA]\\)"), "character", "numeric"),
+      width = end - start + 1L
+    ) |>
+    select(var, start, end, width, type) |>
+    distinct(var, .keep_all = TRUE) |>
+    arrange(start)
+}
+
+parse_do_positions <- function(dict_path) {
+  lines <- read_lines(dict_path) |> str_squish()
+  tokens <- str_extract_all(lines, "(str\\d+|byte|int|long|double)?\\s*([A-Za-z0-9_]+)\\s+(\\d+)\\s*-\\s*(\\d+)") |> unlist()
+  if (!length(tokens)) return(tibble(var=character(), start=integer(), end=integer(), width=integer(), type=character()))
+  mat  <- str_match_all(tokens, "(str\\d+|byte|int|long|double)?\\s*([A-Za-z0-9_]+)\\s+(\\d+)\\s*-\\s*(\\d+)")
+  out  <- purrr::map_dfr(mat, ~tibble(
+    type_token = .x[,2], var = .x[,3], start = as.integer(.x[,4]), end = as.integer(.x[,5])
+  ))
+  out |>
+    mutate(
+      width = end - start + 1L,
+      type  = if_else(str_detect(type_token, "^str\\d+$"), "character", "numeric")
+    ) |>
+    select(var, start, end, width, type) |>
+    distinct(var, .keep_all = TRUE) |>
+    arrange(start)
+}
+
+get_dict_positions <- function(stem) {
+  sps <- path(DATA_DIR, paste0(stem, ".sps"))
+  dof <- path(DATA_DIR, paste0(stem, ".do"))
+  if (file_exists(sps)) return(parse_sps_positions(sps))
+  if (file_exists(dof)) return(parse_do_positions(dof))
+  stop(glue("No .sps or .do dictionary found for {stem} in {DATA_DIR}"))
+}
+
+# ----------------------------
+# 2) Fixed-width reader using dictionary
+# ----------------------------
+read_fixed_width <- function(stem) {
+  txt <- path(DATA_DIR, paste0(stem, ".txt"))
+  if (!file_exists(txt)) stop(glue("Missing {basename(txt)}"))
+  dict <- get_dict_positions(stem)
+  if (nrow(dict) == 0) stop(glue("No positions parsed from dictionary for {stem}"))
+
+  fwf <- fwf_positions(dict$start, dict$end, dict$var)
+  col_types <- paste(ifelse(dict$type == "character", "c", "d"), collapse = "")
+  df <- read_fwf(file = txt, col_positions = fwf, col_types = col_types, na = c("", " ", ".", "NA"))
+  char_cols <- names(df)[purrr::map_lgl(df, is.character)]
+  df |>
+    mutate(across(all_of(char_cols), ~na_if(str_trim(.x), "")))
+}
+
+# ----------------------------
+# 3) Crosswalk loader + rename helper
+# ----------------------------
+safe_read_xwalk <- function(fname) {
+  p <- path(XWALK_DIR, fname)
+  if (!file_exists(p)) {
+    warning(glue("Crosswalk {fname} not found; treating as empty."))
+    return(tibble(wave=integer(), varname=character(), source=character()))
+  }
+  read_csv(p, show_col_types = FALSE) |> mutate(wave = as.integer(wave))
+}
+
+family_xw  <- safe_read_xwalk("family_vars_crosswalk.csv")
+hs_xw      <- safe_read_xwalk("head_spouse_crosswalk.csv")
+phil_xw    <- safe_read_xwalk("philanthropy_crosswalk.csv")
+mob_xw     <- safe_read_xwalk("mobility_crosswalk.csv")
+state_xw   <- safe_read_xwalk("state_crosswalk.csv")
+indocc_xw  <- safe_read_xwalk("industry_occupation_xwalk.csv")
+roster_xw  <- safe_read_xwalk("roster_crosswalk.csv")  # optional for children<18
+
+apply_xwalk <- function(df, xw, yr) {
+  if (!nrow(xw)) return(tibble())
+  xwy <- dplyr::filter(xw, wave == yr)
+  if (!nrow(xwy)) return(tibble())
+  missing <- setdiff(xwy$source, names(df))
+  if (length(missing)) warning(glue("Wave {yr}: missing fields: {paste(missing, collapse=', ')}"))
+  keep <- intersect(xwy$source, names(df))
+  out  <- dplyr::select(df, all_of(keep))
+  names(out) <- xwy |> filter(source %in% keep) |> arrange(match(source, keep)) |> pull(varname)
+  out
+}
+
+# ----------------------------
+# 4) Wave readers (Family + Individual/Roster)
+# ----------------------------
+load_family_wave <- function(yr) {
+  stem <- glue("FAM{yr}ER")
+  read_fixed_width(stem) |> mutate(wave = yr)
+}
+
+load_indiv_wave <- function(yr) {
+  stems <- c(glue("IND{yr}ER"), glue("PR{yr}ER"))
+  pick  <- stems[file_exists(path(DATA_DIR, paste0(stems, ".txt")))]
+  if (!length(pick)) {
+    warning(glue("No individual/roster file found for {yr}; children<18 will be NA"))
+    return(NULL)
+  }
+  read_fixed_width(pick[[1]]) |> mutate(wave = yr)
+}
+
+# ----------------------------
+# 5) IDs & roster mapping
+# ----------------------------
+FAMILY_ID_COL    <- "ER30002"
+INTERVIEW_YR_COL <- "ER30000"
+INDIV_FAMILY_ID  <- "ER30002"
+
+get_roster_map <- function(yr) {
+  rxy <- roster_xw |> filter(wave == yr)
+  list(
+    age = rxy |> filter(varname == "age") |> pull(source) |> dplyr::first(),
+    in_fu = rxy |> filter(varname == "in_fu") |> pull(source) |> dplyr::first(),
+    rel = rxy |> filter(varname == "rel_to_head") |> pull(source) |> dplyr::first()
+  )
+}
+
+# ----------------------------
+# 6) Build one wave
+# ----------------------------
+build_wave <- function(yr) {
+  fam <- load_family_wave(yr)
+  ind <- load_indiv_wave(yr)
+
+  if (!FAMILY_ID_COL %in% names(fam)) stop(glue("Set FAMILY_ID_COL correctly; not in Family {yr}"))
+
+  fam_keys <- tibble(
+    family_id = fam[[FAMILY_ID_COL]],
+    interview_year = if (INTERVIEW_YR_COL %in% names(fam)) as.integer(fam[[INTERVIEW_YR_COL]]) else as.integer(yr)
+  )
+
+  fam_core <- apply_xwalk(fam, family_xw, yr)
+  hs       <- apply_xwalk(fam, hs_xw, yr)
+  indocc   <- apply_xwalk(fam, indocc_xw, yr)
+  phil     <- apply_xwalk(fam, phil_xw, yr)
+  mob      <- apply_xwalk(fam, mob_xw, yr)
+  st       <- apply_xwalk(fam, state_xw, yr)
+
+  # ---- Children < 18 in FU (optional; requires roster_crosswalk.csv + IND/PR)
+  if (is.null(ind) || !nrow(roster_xw) || !any(roster_xw$wave == yr)) {
+    children <- tibble(family_id = fam[[FAMILY_ID_COL]], n_children_u18 = NA_integer_)
+  } else {
+    rm <- get_roster_map(yr)
+    if (any(is.na(unlist(rm))) || !all(unlist(rm) %in% names(ind))) {
+      warning(glue("Wave {yr}: roster crosswalk incomplete; children<18 set to NA"))
+      children <- tibble(family_id = fam[[FAMILY_ID_COL]], n_children_u18 = NA_integer_)
+    } else {
+      df_ind <- ind |>
+        transmute(
+          family_id = .data[[INDIV_FAMILY_ID]],
+          age  = suppressWarnings(as.numeric(.data[[rm$age]])),
+          in_fu= .data[[rm$in_fu]],
+          rel  = .data[[rm$rel]]
+        )
+
+      # Adjust these if your REL is numeric; leaving permissive for MVP
+      in_fu_ok <- if (is.numeric(df_ind$in_fu)) df_ind$in_fu == 1 else df_ind$in_fu %in% c("1","Y","YES")
+      rel_ok   <- rep(TRUE, nrow(df_ind))
+
+      children <- df_ind |>
+        filter(in_fu_ok, rel_ok, !is.na(age), age < 18) |>
+        count(family_id, name = "n_children_u18")
+    }
+  }
+
+  fam_keys |>
+    bind_cols(fam_core) |>
+    left_join(hs,     by = character()) |>
+    left_join(indocc, by = character()) |>
+    left_join(phil,   by = character()) |>
+    left_join(mob,    by = character()) |>
+    left_join(st,     by = character()) |>
+    left_join(children, by = "family_id") |>
+    mutate(n_children_u18 = coalesce(n_children_u18, 0L),
+           wave = yr)
+}
+
+# ----------------------------
+# 7) Run across available waves and write
+# ----------------------------
+available_fam_years <- dir_ls(DATA_DIR, glob = "FAM*ER.txt") |> path_file() |> str_extract("\\d{4}") |> as.integer()
+use_years <- intersect(waves, available_fam_years)
+
+panel <- purrr::map_dfr(use_years, build_wave) |>
+  filter(interview_year >= 2001) |>
+  arrange(family_id, interview_year) |>
+  relocate(family_id, interview_year, wave)
+
+write_parquet(panel, OUT_PATH)
+message("Wrote: ", OUT_PATH)
+
+```
 
