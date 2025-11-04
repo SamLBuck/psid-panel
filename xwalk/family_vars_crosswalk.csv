@@ -1,7 +1,7 @@
 wave,varname,source
-2001,family_id,ER30002
+2001,family_id,ER17002
 2001,interview_year,ER30000
 2001,total_household_earnings,ER17037
-2003,family_id,ER30002
+2003,family_id,ER21002
 2003,interview_year,ER30000
 2003,total_household_earnings,ER21037
