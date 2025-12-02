@@ -21,3 +21,9 @@ Install once
 
 #### License
 Code in this repository is released under an MIT-style license. PSID data files are not included and are governed by PSID’s own licenses/terms.
+
+
+## Contact
+Maintainer: Sam Buck (Hope College)  
+Email: samuellorenbuck@gmail.com  
+For questions about the PSID variables, structure, or extending the panel build scripts, feel free to reach out.
