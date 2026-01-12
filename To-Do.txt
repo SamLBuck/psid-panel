@@ -1,0 +1,39 @@
+Figure out best way to validate data
+
+Confirm family_id format is correct, it usually shows one or two individuals with the same number in that column, Silveus said that it was alright, just wanna look into
+it and see if there's an individual ID that would be helpful.  
+
+Crosswalk Inspection
+Mobility Crosswalk was problematic, and now empty. There wasn't a clean variable question for anything other than 2001 if I remember right. The four reasons for leaving
+
+Make some preliminary graphs of the data that might be interesting to the research 
+
+Remind myself of the correct way to track variables per year, go through each crosswalk
+
+
+
+1/13
+Data validation and preliminary graphing of variables of interest to the research
+
+1/12
+
+I've been using git version control for this project and for the script that compiles the data set
+	I like this because it is easier to display in a project portfolio for software and data jobs, 
+	I'm also very familiar with the way that it works
+
+I set up the environment for R and github on this computer, I was mostly using the other one
+
+I ran the script to observe the compiled data, I had emailed Silveus earlier asking for his preliminary input, and he said that it was looking as he expected. 
+
+I'm doing some work for data validation, there are some variables on the PSID that seemingly don't track from year to year, and I'm trying to keep track of that 
+as well as compiling a list of those instancesthat my excel sheets that I compiled that track the variables per year are correct, and data display
+
+
+
+
+
+
+personally, when I get back I will log my hours, email Baumann, go look for shoes, put my laptop away, check my UND grade when I go to the bathroom, see what wood stain
+is food safe and sufficient for the colorado board, eventually start applying to accounting internships, eventually look for apartments, preferably close to 230 fountain
+street, eventually tell Ethan about Dune buggies, text Maia's father, eventually finish the bingo application, ask to work four hours, text about potentially hanging out
+at Curragh after or before pizza, whatever Ethan prefer, ask Maia Tr to marry me, figure out a co-ed basketball - text Heath, 
