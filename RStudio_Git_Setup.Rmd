@@ -34,18 +34,23 @@ OUT_PATH  <- here("output", "psid_family_year_2001_latest.parquet")
 
 dir_create(DATA_DIR); dir_create(XWALK_DIR); dir_create(path_dir(OUT_PATH))
 
-# If you only want specific waves, set here; otherwise we’ll auto-detect
+# If you only want specific waves, set here; otherwise we’ll auto-detect all available
 waves <- c(2001, 2003)
 
 `%OR%` <- function(x, y) if (is.null(x) || length(x) == 0 || all(is.na(x))) y else x
 
+# -----------------------------
+# Dictionary parsing (SPSS/Stata)
+# -----------------------------
 parse_sps_positions <- function(dict_path) {
   lines <- read_lines(dict_path)
   dl_start <- which(str_detect(lines, regex("^\\s*DATA\\s+LIST", ignore_case = TRUE)))
   if (!length(dl_start)) return(tibble(var=character(), start=integer(), end=integer(), width=integer(), type=character()))
+
   after <- lines[seq(dl_start[1], length(lines))]
   stop_idx <- which(str_detect(after, regex("^\\s*VARIABLE\\s+LABELS", ignore_case = TRUE)))
   if (length(stop_idx)) after <- after[seq(1, stop_idx[1] - 1)]
+
   after <- gsub("\\t", " ", after)
   after <- gsub("\\*.*$", "", after)
   after <- str_squish(after)
@@ -56,6 +61,7 @@ parse_sps_positions <- function(dict_path) {
   blob <- paste(after, collapse = " ")
   m <- str_match_all(blob, "(?i)\\b([A-Za-z0-9_]+)\\s+(\\d+)\\s*-\\s*(\\d+)\\s*(\\([aA]\\))?")[[1]]
   if (!nrow(m)) return(tibble(var=character(), start=integer(), end=integer(), width=integer(), type=character()))
+
   tibble(
     var   = m[,2],
     start = as.integer(m[,3]),
@@ -72,6 +78,7 @@ parse_do_positions <- function(dict_path) {
   pat <- "(str\\d+|byte|int|long|double)?\\s*([A-Za-z0-9_]+)\\s+(\\d+)\\s*-\\s*(\\d+)"
   toks <- str_extract_all(lines, pat) |> unlist()
   if (!length(toks)) return(tibble(var=character(), start=integer(), end=integer(), width=integer(), type=character()))
+
   mats <- str_match_all(toks, pat)
   map_dfr(mats, ~tibble(
     type_token = .x[,2],
@@ -91,28 +98,43 @@ get_dict_positions <- function(stem) {
   dof <- path(DATA_DIR, paste0(stem, ".do"))
   if (file_exists(sps)) return(parse_sps_positions(sps))
   if (file_exists(dof)) return(parse_do_positions(dof))
-  warning(glue("No .sps or .do dictionary found for {stem}")); 
+  warning(glue("No .sps or .do dictionary found for {stem}"))
   tibble(var=character(), start=integer(), end=integer(), width=integer(), type=character())
 }
 
+# -----------------------------
+# Fixed-width reader
+# -----------------------------
 read_fixed_width <- function(stem) {
   txt <- path(DATA_DIR, paste0(stem, ".txt"))
   if (!file_exists(txt)) {
-    warning(glue("Missing {path_file(txt)}")); 
+    warning(glue("Missing {path_file(txt)}"))
     return(tibble())
   }
+
   dict <- get_dict_positions(stem)
   if (!nrow(dict)) {
-    warning(glue("No positions parsed from dictionary for {stem}")); 
+    warning(glue("No positions parsed from dictionary for {stem}"))
     return(tibble())
   }
+
   fwf <- readr::fwf_positions(dict$start, dict$end, dict$var)
   col_types <- paste(ifelse(dict$type == "character", "c", "d"), collapse = "")
-  df <- readr::read_fwf(file = txt, col_positions = fwf, col_types = col_types, na = c("", " ", ".", "NA"))
+
+  df <- readr::read_fwf(
+    file = txt,
+    col_positions = fwf,
+    col_types = col_types,
+    na = c("", " ", ".", "NA")
+  )
+
   char_cols <- names(df)[map_lgl(df, is.character)]
   df |> mutate(across(all_of(char_cols), ~na_if(str_trim(.x), "")))
 }
 
+# -----------------------------
+# Crosswalk loader
+# -----------------------------
 safe_read_xwalk <- function(fname) {
   p <- path(XWALK_DIR, fname)
   if (!file_exists(p)) return(tibble(wave=integer(), varname=character(), source=character()))
@@ -134,20 +156,19 @@ mob_xw    <- safe_read_xwalk("mobility_crosswalk.csv")
 state_xw  <- safe_read_xwalk("state_crosswalk.csv")
 roster_xw <- safe_read_xwalk("roster_crosswalk.csv")
 
+# Select + rename variables for a wave using crosswalk
 apply_xwalk <- function(df, xw, yr) {
   if (!nrow(df) || !nrow(xw)) return(tibble())
-  ?nrow
   xwy <- xw |> filter(wave == yr)
   if (!nrow(xwy)) return(tibble())
+
   keep <- intersect(xwy$source, names(df))
-  ?intersect
   if (!length(keep)) return(tibble())
+
   out <- select(df, all_of(keep))
   names(out) <- xwy |> filter(source %in% keep) |> arrange(match(source, keep)) |> pull(varname)
-  ?pull
   out
 }
-# WHY IS INTERSECT USED HERE?
 
 # Remove duplicate-named columns, keeping the first
 dedup_cols <- function(df) {
@@ -155,20 +176,29 @@ dedup_cols <- function(df) {
   df
 }
 
-load_family_wave <- function(yr) read_fixed_width(glue("FAM{yr}ER")) |> mutate(wave = yr)
-load_indiv_wave  <- function(yr) {
+# -----------------------------
+# Wave loaders
+# -----------------------------
+load_family_wave <- function(yr) read_fixed_width(glue("FAM{yr}ER")) |> mutate(wave = as.integer(yr))
+
+load_indiv_wave <- function(yr) {
   stems <- c(glue("IND{yr}ER"), glue("PR{yr}ER"))
   pick  <- stems[file_exists(path(DATA_DIR, paste0(stems, ".txt")))]
   if (!length(pick)) return(NULL)
-  read_fixed_width(pick[[1]]) |> mutate(wave = yr)
+  read_fixed_width(pick[[1]]) |> mutate(wave = as.integer(yr))
 }
 
+# -----------------------------
+# Key finders (crosswalk-first)
+# -----------------------------
 find_family_id_col <- function(fam_df, yr) {
   src <- family_xw |> filter(wave == yr, varname == "family_id") |> pull(source) |> first()
   if (!is.na(src) && src %in% names(fam_df)) return(src)
 
+  # Heuristic fallback (kept, but warn loudly)
   cands <- grep("^ER\\d{4,6}02$", names(fam_df), value = TRUE)
   if (length(cands)) {
+    warning("Wave ", yr, ": family_id not found in crosswalk; using heuristic among: ", paste(cands, collapse = ", "))
     score <- vapply(cands, function(v){
       x <- suppressWarnings(as.numeric(fam_df[[v]]))
       n <- length(x); u <- length(unique(x))
@@ -178,25 +208,29 @@ find_family_id_col <- function(fam_df, yr) {
     return(cands[which.max(score)])
   }
 
-  if ("ER30002" %in% names(fam_df)) return("ER30002")
   stop("Could not identify family ID column for wave ", yr,
-       ". Add a row to family_vars_crosswalk.csv: wave,varname,source => ",
-       yr, ",family_id,ERxxxxx")
+       ". Add to family_vars_crosswalk.csv: ", yr, ",family_id,ERxxxxx")
 }
 
 find_interview_year <- function(fam_df, yr) {
+  # With your updated crosswalk, this should always hit.
   src <- family_xw |> filter(wave == yr, varname == "interview_year") |> pull(source) |> first()
   if (!is.na(src) && src %in% names(fam_df)) return(suppressWarnings(as.integer(fam_df[[src]])))
-  if ("ER30000" %in% names(fam_df)) return(suppressWarnings(as.integer(fam_df[["ER30000"]])))
+
+  warning("Wave ", yr, ": interview_year source not found; falling back to wave year. Fix crosswalk.")
   rep.int(as.integer(yr), nrow(fam_df))
 }
 
+# -----------------------------
+# Build a single wave
+# -----------------------------
 build_wave <- function(yr) {
   fam <- load_family_wave(yr)
   if (!nrow(fam)) return(tibble())
   ind <- load_indiv_wave(yr)
 
   fam_id_col <- find_family_id_col(fam, yr)
+
   keys <- tibble(
     family_id      = fam[[fam_id_col]],
     interview_year = find_interview_year(fam, yr),
@@ -219,27 +253,43 @@ build_wave <- function(yr) {
   # Optional: children < 18 (only if roster_xw + IND/PR are available)
   if (!is.null(ind) && nrow(roster_xw) && any(roster_xw$wave == yr)) {
     rxy <- roster_xw |> filter(wave == yr)
-    age  <- rxy |> filter(varname=="age") |> pull(source)  |> first()
-    in_fu<- rxy |> filter(varname=="in_fu") |> pull(source) |> first()
-    rel  <- rxy |> filter(varname=="rel_to_head") |> pull(source) |> first()
-    if (!any(is.na(c(age,in_fu,rel))) && all(c(age,in_fu,rel) %in% names(ind))) {
-      IND_FID <- if ("ER30002" %in% names(ind)) "ER30002" else fam_id_col
+    age   <- rxy |> filter(varname=="age") |> pull(source) |> first()
+    in_fu <- rxy |> filter(varname=="in_fu") |> pull(source) |> first()
+    rel   <- rxy |> filter(varname=="rel_to_head") |> pull(source) |> first()
+    ind_fid <- rxy |> filter(varname=="family_id") |> pull(source) |> first()   # <-- ADD THIS TO roster_crosswalk.csv
+
+    if (!any(is.na(c(age, in_fu, rel, ind_fid))) && all(c(age, in_fu, rel, ind_fid) %in% names(ind))) {
       kids <- ind |>
-        transmute(family_id = .data[[IND_FID]],
-                  age = suppressWarnings(as.numeric(.data[[age]])),
-                  in_fu = .data[[in_fu]]) |>
+        transmute(
+          family_id = .data[[ind_fid]],
+          age       = suppressWarnings(as.numeric(.data[[age]])),
+          in_fu     = .data[[in_fu]]
+        ) |>
         mutate(in_fu_ok = if (is.numeric(in_fu)) in_fu == 1 else in_fu %in% c("1","Y","YES")) |>
         filter(in_fu_ok, !is.na(age), age < 18) |>
         count(family_id, name = "n_children_u18")
+
       out <- out |> left_join(kids, by = "family_id")
     }
   }
 
   if (!"n_children_u18" %in% names(out)) out <- mutate(out, n_children_u18 = 0L)
-  dedup_cols(out)
-  ??dedup_cols
+
+  out <- dedup_cols(out)
+
+  # Hard check: one row per family per wave
+  dups <- out %>% count(family_id, wave, name = "n") %>% filter(n > 1)
+  if (nrow(dups)) {
+    print(dups, n = 50)
+    stop("Wave ", yr, ": build_wave produced duplicate (family_id, wave) rows.")
+  }
+
+  out
 }
 
+# -----------------------------
+# Run all waves
+# -----------------------------
 fam_txts    <- dir_ls(DATA_DIR, regexp = "(?i)FAM\\d{4}ER\\.txt$")
 found_years <- str_extract(path_file(fam_txts), "\\d{4}") |> as.integer()
 use_years   <- (waves %OR% found_years) |> intersect(found_years) |> sort()
@@ -255,46 +305,52 @@ if (!"interview_year" %in% names(panel)) panel <- mutate(panel, interview_year =
 panel <- panel |>
   mutate(interview_year = coalesce(interview_year, wave)) |>
   filter(!is.na(family_id), !is.na(wave), wave >= 2001) |>
-  arrange(family_id, interview_year) |>
+  arrange(family_id, wave) |>
   relocate(family_id, interview_year, wave)
 
+# Final hard check across all waves
+dups_panel <- panel %>% count(family_id, wave, name = "n") %>% filter(n > 1)
+if (nrow(dups_panel)) {
+  print(dups_panel, n = 100)
+  stop("Panel has duplicate (family_id, wave) rows.")
+}
+
 write_parquet(panel, OUT_PATH)
-message("Skeleton written: ", OUT_PATH, 
-        "  | rows=", nrow(panel), "  cols=", ncol(panel),
-        "  | waves=", paste(unique(panel$wave), collapse=", "))
-```
-
-```{r check-numbers}
-library(dplyr)
-
-# 1) Confirm key uniqueness
-panel %>% 
-  count(family_id, interview_year, name = "n") %>% 
-  filter(n > 1)
-# -> should return 0 rows
-
-# 2) How many families per wave?
-panel %>% count(wave)
-
-# 3) Any missing keys?
-panel %>% summarise(
-  n = n(),
-  n_missing_family = sum(is.na(family_id)),
-  n_missing_year   = sum(is.na(interview_year))
+message(
+  "Wrote: ", OUT_PATH,
+  " | rows=", nrow(panel),
+  " | cols=", ncol(panel),
+  " | waves=", paste(sort(unique(panel$wave)), collapse = ", ")
 )
 
-# 4) Look for obvious outliers (ages)
-panel %>%
-  summarise(
-    min_head_age   = min(head_age,   na.rm = TRUE),
-    max_head_age   = max(head_age,   na.rm = TRUE),
-    min_spouse_age = min(spouse_age, na.rm = TRUE),
-    max_spouse_age = max(spouse_age, na.rm = TRUE)
-)
 
-# 5) Verify each family has at most one row per wave
-panel %>%
-  count(family_id, wave) %>%
-  filter(n > 1)
 
+
+
+
+
+fam2001 <- load_family_wave(2001)
+fam2003 <- load_family_wave(2003)
+fam2005 <- load_family_wave(2005)
+fam2007 <- load_family_wave(2007)
+fam2009 <- load_family_wave(2009)
+fam2011 <- load_family_wave(2011)
+fam2013 <- load_family_wave(2013)
+fam2015 <- load_family_wave(2015)
+fam2017 <- load_family_wave(2017)
+fam2019 <- load_family_wave(2019)
+fam2021 <- load_family_wave(2021)
+
+
+find_year_var(fam2001, 2001)
+find_year_var(fam2003, 2003)
+find_year_var(fam2005, 2005)
+find_year_var(fam2007, 2007)
+find_year_var(fam2009, 2009)
+find_year_var(fam2011, 2011)
+find_year_var(fam2013, 2013)
+find_year_var(fam2015, 2015)
+find_year_var(fam2017, 2017)
+find_year_var(fam2019, 2019)
+find_year_var(fam2021, 2021)
 ```
