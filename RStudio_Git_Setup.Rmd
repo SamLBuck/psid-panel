@@ -28,7 +28,6 @@ suppressPackageStartupMessages({
   library(arrow)
 })
 
-# ---- paths ----
 DATA_DIR  <- here("data_raw")
 XWALK_DIR <- here("xwalk")
 OUT_PATH  <- here("output", "psid_family_year_2001_latest.parquet")
@@ -137,14 +136,18 @@ roster_xw <- safe_read_xwalk("roster_crosswalk.csv")
 
 apply_xwalk <- function(df, xw, yr) {
   if (!nrow(df) || !nrow(xw)) return(tibble())
+  ?nrow
   xwy <- xw |> filter(wave == yr)
   if (!nrow(xwy)) return(tibble())
   keep <- intersect(xwy$source, names(df))
+  ?intersect
   if (!length(keep)) return(tibble())
   out <- select(df, all_of(keep))
   names(out) <- xwy |> filter(source %in% keep) |> arrange(match(source, keep)) |> pull(varname)
+  ?pull
   out
 }
+# WHY IS INTERSECT USED HERE?
 
 # Remove duplicate-named columns, keeping the first
 dedup_cols <- function(df) {
@@ -234,6 +237,7 @@ build_wave <- function(yr) {
 
   if (!"n_children_u18" %in% names(out)) out <- mutate(out, n_children_u18 = 0L)
   dedup_cols(out)
+  ??dedup_cols
 }
 
 fam_txts    <- dir_ls(DATA_DIR, regexp = "(?i)FAM\\d{4}ER\\.txt$")

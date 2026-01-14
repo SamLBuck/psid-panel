@@ -1,0 +1,13 @@
+wave,varname,source
+2001,head_age,ER17013
+2001,spouse_age,ER17015
+2001,head_race,ER19989
+2001,spouse_race,ER19897
+2001,head_ethnicity,ER19993
+2001,spouse_ethnicity,ER19901
+2003,head_age,ER21017
+2003,spouse_age,ER21019
+2003,head_race,ER23426
+2003,spouse_race,ER23334
+2003,head_ethnicity,ER23430
+2003,spouse_ethnicity,ER23338
