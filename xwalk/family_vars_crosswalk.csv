@@ -1,5 +1,4 @@
 wave,varname,source
-2001,family_id,ER17002
 2001,interview_year,ER17011
 2003,interview_year,ER21014
 2005,interview_year,ER25014
@@ -11,7 +10,14 @@ wave,varname,source
 2017,interview_year,ER66014
 2019,interview_year,ER72014
 2021,interview_year,ER78014
-2001,total_household_earnings,ER17037
-2003,family_id,ER21002
-2003,interview_year,ER30000
-2003,total_household_earnings,ER21037
+2001,family_id,ER17022
+2003,family_id,ER21009
+2005,family_id,ER25009
+2007,family_id,ER36009
+2009,family_id,ER42009
+2011,family_id,ER47309
+2013,family_id,ER53009
+2015,family_id,ER60009
+2017,family_id,ER66009
+2019,family_id,ER72009
+2021,family_id,ER78009

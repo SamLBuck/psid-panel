@@ -1,5 +1,22 @@
 Figure out best way to validate data
 
+
+1/22 Meeting
+
+1/21
+Two hours before meeting
+
+1/20
+Still validating data and the way that it's formatted.
+
+Get Neil Silveus on this github, show him how to clone and push... I'll bet he likes that stuff
+
+Get LLM input on how exactly to do all that, start on the last chat when you pick it up again
+
+log hours
+
+
+
 Confirm family_id format is correct, it usually shows one or two individuals with the same number in that column, Silveus said that it was alright, just wanna look into
 it and see if there's an individual ID that would be helpful.  
 
