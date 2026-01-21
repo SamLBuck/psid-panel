@@ -1,4 +1,22 @@
+Hello Dr. Silveus
+MEETING:
+I know that it's been a minute since meeting, so I'm excited to share progress
+and also take some time and make sure that I'm aligned to what you are expecting
+
+There's two variables in the panel that I don't have
+
+I've started some graphing of basic variables, I can keep doing that if wanted
+and when there's more direction
+
+The philantropy data request is very robust
+
+I recently realized I was anchoring on the wrong ER code for family_id,
+I recently changed it and started doing some analysis
+
+
+
 Figure out best way to validate data
+
 
 
 1/22 Meeting
