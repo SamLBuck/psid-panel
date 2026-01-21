@@ -4,6 +4,8 @@ I know that it's been a minute since meeting, so I'm excited to share progress
 and also take some time and make sure that I'm aligned to what you are expecting
 
 There's two variables in the panel that I don't have
+there is no single permanent code for total family income across all years. 
+
 
 I've started some graphing of basic variables, I can keep doing that if wanted
 and when there's more direction
@@ -13,7 +15,20 @@ The philantropy data request is very robust
 I recently realized I was anchoring on the wrong ER code for family_id,
 I recently changed it and started doing some analysis
 
+I can add you to the project repository as well as show some of the git
+commands to be able to contribute once I am off the project if it needs 
+any maintenance
 
+Tonight:
+
+Test Panel construction on personal computer before meeting / log an hour for't
+
+Implement Boerigter suggestions, start using the workflow for connections
+
+Taco night!!
+And Pulls and Pushs
+
+I've just also gotta make sure that I'm not missing anything in class thats 
 
 Figure out best way to validate data
 
