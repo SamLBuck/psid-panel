@@ -6,6 +6,20 @@ Figure out best way to validate data
 1/21
 Two hours before meeting
 
+Wait until back in office / fifteen minutes
+
+Can't find the total income or the current state / former might be geo restricted
+
+Gave some age graphs, fixed the parquet I think, should be ready to meet  
+
+
+
+
+
+
+maybe just make the parquet and email to myself 
+before I leave
+
 1/20
 Still validating data and the way that it's formatted.
 
@@ -15,7 +29,7 @@ Get LLM input on how exactly to do all that, start on the last chat when you pic
 
 log hours
 
-
+SUA working / compile lead of job leads / 
 
 Confirm family_id format is correct, it usually shows one or two individuals with the same number in that column, Silveus said that it was alright, just wanna look into
 it and see if there's an individual ID that would be helpful.  
@@ -55,11 +69,3 @@ I ran the script to observe the compiled data, I had emailed Silveus earlier ask
 I'm doing some work for data validation, there are some variables on the PSID that seemingly don't track from year to year, and I'm trying to keep track of that 
 as well as compiling a list of those instances that my excel sheets that I compiled that track the variables per year are correct, and data display
 
-
-
-
-Put that meeting in the reminders
-Definitely could get a couple hours for before the silveus meeting in this weekend... Do that tomorrow perhaps a little bit and also do that before 
-See what wood stain
-is food safe and sufficient for the colorado board, eventually start applying to accounting internships, eventually look for apartments, preferably close to 230 fountain
-street, text Maia's father, eventually finish the bingo application, ai slop content generated from mobile phone, compile list of job leads, ask to work four hours whatever Ethan prefer, ask Maia Tr to marry me, figure out a co-ed basketball - text Heath, 
